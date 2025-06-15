@@ -1,0 +1,63 @@
+body {
+    background-color: #121212; /* Latar belakang gelap */
+    color: #FFFFFF; /* Teks putih */
+    font-family: 'Arial', sans-serif; /* Font bersih */
+}
+
+.metric-value, .metric-delta {
+    color: #39FF14 !important; 
+    font-weight: bold;
+    font-size: 2em; /* Ukuran font lebih besar untuk metrik */
+    text-shadow: 1px 1px 5px rgba(0, 0, 0, 0.7); /* Bayangan teks */
+}
+
+button {
+    background-color: #FF073A; /* Latar belakang tombol */
+    color: white; /* Warna teks tombol */
+    border-radius: 8px; /* Sudut lebih membulat */
+    border: none; /* Menghapus garis batas */
+    padding: 10px 20px; /* Padding tombol */
+    font-size: 1em; /* Ukuran font tombol */
+    transition: background-color 0.3s, transform 0.2s; /* Transisi halus */
+}
+
+button:hover {
+    background-color: #FF4D00; /* Warna lebih terang saat hover */
+    transform: scale(1.05); /* Efek pembesaran saat hover */
+}
+
+.sidebar {
+    background-color: #1E1E1E; /* Latar belakang sidebar */
+    border-right: 1px solid #444; /* Garis batas halus */
+}
+
+.sidebar h1, .sidebar h2 {
+    color: #FFFFFF; /* Teks header sidebar */
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5); /* Bayangan teks */
+}
+
+.subheader {
+    color: #39FF14; /* Subheader hijau */
+    font-size: 1.5em; /* Ukuran lebih besar */
+    border-bottom: 2px solid #39FF14; /* Garis bawah */
+    padding-bottom: 5px; /* Ruang bawah */
+}
+
+.data-frame {
+    background-color: #1E1E1E; /* Latar belakang data frame */
+    color: #FFFFFF; /* Warna teks data frame */
+    border-radius: 8px; /* Sudut membulat */
+    padding: 10px; /* Padding data frame */
+}
+
+.expander-header {
+    background-color: #1E1E1E; /* Warna header expander */
+    color: #FFFFFF; /* Warna teks expander */
+    font-weight: bold; /* Teks tebal */
+}
+
+.expander {
+    background-color: #1E1E1E; /* Latar belakang expander */
+    border-radius: 8px; /* Sudut membulat */
+    margin-bottom: 10px; /* Ruang bawah */
+}
