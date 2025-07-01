@@ -62,12 +62,6 @@ def preprocess_data(df):
 # Evaluasi model tanpa melatih ulang
 def evaluate_model(model, X, y):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # Cek NaN pada X_test
-    if np.any(np.isnan(X_test.toarray())):
-        st.error("Data uji mengandung nilai NaN.")
-        return
-
     y_pred = model.predict(X_test)
 
     accuracy = accuracy_score(y_test, y_pred)
@@ -128,9 +122,9 @@ def predict_bulk(model, tfidf, df_input):
     df_input['text_length'] = df_input['text'].apply(len)
 
     df_input['createTimeISO'] = pd.to_datetime(df_input['createTimeISO'], errors='coerce')
-    df_input['hour'] = df_input['createTimeISO'].dt.hour.fillna(0).astype(int)
-    df_input['minute'] = df_input['createTimeISO'].dt.minute.fillna(0).astype(int)
-    df_input['second'] = df_input['createTimeISO'].dt.second.fillna(0).astype(int)
+    df_input['hour'] = df_input['createTimeISO'].dt.hour
+    df_input['minute'] = df_input['createTimeISO'].dt.minute
+    df_input['second'] = df_input['createTimeISO'].dt.second
 
     df_input['authorMeta.name_encoded'] = df_input['authorMeta.name'].apply(
         lambda x: st.session_state.le_name.transform([str(x)])[0]
@@ -143,7 +137,6 @@ def predict_bulk(model, tfidf, df_input):
 
     tfidf_matrix = tfidf.transform(df_input['text'])
 
-    # Pastikan bahwa kolom yang digunakan ada dalam df_input
     features = hstack((tfidf_matrix, np.array(df_input[[
         'authorMeta.name_encoded', 'musicMeta.musicName_encoded',
         'videoMeta.duration', 'hour', 'minute', 'second', 'text_length'
@@ -266,14 +259,8 @@ def main():
             np.array(df[['authorMeta.name_encoded', 'musicMeta.musicName_encoded',
                          'videoMeta.duration', 'hour', 'minute', 'second', 'text_length']])
         ))
-        
         X = features
         y = df['is_popular']
-
-        # Cek dimensi
-        if X.shape[1] != len(le_name.classes_) + 6:  # 6 adalah jumlah fitur tambahan
-            st.error("Dimensi fitur tidak sesuai dengan model.")
-            return
 
         evaluate_model(model, X, y)
 
