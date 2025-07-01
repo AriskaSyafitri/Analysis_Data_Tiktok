@@ -59,17 +59,23 @@ def preprocess_data(df):
     ))
     return df, features, df['is_popular'], tfidf, le_name, le_music
 
-# Evaluasi model tanpa melatih ulang
 def evaluate_model(model, X, y):
+    # Split data into train and test sets
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    y_pred = model.predict(X_test)
 
+    try:
+        y_pred = model.predict(X_test)
+    except ValueError as e:
+        st.error(f"Error during prediction: {e}")
+        return
+
+    # Calculate evaluation metrics
     accuracy = accuracy_score(y_test, y_pred)
     precision = precision_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred)
 
-    # Menampilkan metrik
+    # Display metrics
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Akurasi", f"{accuracy:.2f}")
     col2.metric("Presisi", f"{precision:.2f}")
