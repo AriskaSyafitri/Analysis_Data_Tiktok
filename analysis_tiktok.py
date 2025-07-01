@@ -33,12 +33,11 @@ def preprocess_data(df):
     df.dropna(inplace=True)
     le_name = LabelEncoder()
     df['authorMeta.name_encoded'] = le_name.fit_transform(df['authorMeta.name'])
-    
+
     le_music = LabelEncoder()
     df['musicMeta.musicName_encoded'] = le_music.fit_transform(df['musicMeta.musicName'])
 
     df['text_length'] = df['text'].apply(len)
-    df['hashtags_str'] = df['text'].apply(lambda x: ' '.join(re.findall(r"#\w+", str(x))))
     df['createTimeISO'] = pd.to_datetime(df['createTimeISO'])
     df['hour'] = df['createTimeISO'].dt.hour
     df['minute'] = df['createTimeISO'].dt.minute
@@ -109,16 +108,23 @@ def predict_content(model, tfidf, text, author, music, duration, waktu):
     hour = waktu.hour
     minute = waktu.minute
     second = waktu.second
-    
+
+    # Encode author dan music menggunakan LabelEncoder
     author_encoded = st.session_state.le_name.transform([str(author)])[0] if str(author) in st.session_state.le_name.classes_ else -1
     music_encoded = st.session_state.le_music.transform([str(music)])[0] if str(music) in st.session_state.le_music.classes_ else -1
-    
+
+    # Transformasi teks menggunakan TF-IDF
     tfidf_matrix = tfidf.transform([text])
     features = hstack((
         tfidf_matrix,
         np.array([[author_encoded, music_encoded, duration, hour, minute, second, text_length]])
     ))
-    
+
+    # Pastikan jumlah fitur sesuai
+    if features.shape[1] != 105:
+        st.error(f"Jumlah fitur tidak sesuai: {features.shape[1]} vs 105")
+        return None
+
     prediction = model.predict(features)
     return prediction[0]
 
