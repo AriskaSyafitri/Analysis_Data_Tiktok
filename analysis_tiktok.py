@@ -58,7 +58,7 @@ def preprocess_data(df):
                       'videoMeta.duration', 'hour', 'minute', 'second', 'text_length']])
     ))
     
-    # Simpan encoder ke dalam session state
+    # Simpan encoder dan tfidf ke dalam session state
     st.session_state.le_name = le_name
     st.session_state.le_music = le_music
     st.session_state.tfidf = tfidf
@@ -70,6 +70,9 @@ def evaluate_model(model, X, y):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     # Cek dimensi fitur
+    print(f"Jumlah fitur pelatihan: {X_train.shape[1]}")
+    print(f"Jumlah fitur uji: {X_test.shape[1]}")
+
     if X_test.shape[1] != model.n_features_in_:
         st.error(f"Jumlah fitur tidak cocok. Model mengharapkan {model.n_features_in_} fitur, tetapi X_test memiliki {X_test.shape[1]} fitur.")
         return
