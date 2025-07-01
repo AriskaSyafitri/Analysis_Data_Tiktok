@@ -33,11 +33,12 @@ def preprocess_data(df):
     df.dropna(inplace=True)
     le_name = LabelEncoder()
     df['authorMeta.name_encoded'] = le_name.fit_transform(df['authorMeta.name'])
-
+    
     le_music = LabelEncoder()
     df['musicMeta.musicName_encoded'] = le_music.fit_transform(df['musicMeta.musicName'])
 
     df['text_length'] = df['text'].apply(len)
+    df['hashtags_str'] = df['text'].apply(lambda x: ' '.join(re.findall(r"#\w+", str(x))))
     df['createTimeISO'] = pd.to_datetime(df['createTimeISO'])
     df['hour'] = df['createTimeISO'].dt.hour
     df['minute'] = df['createTimeISO'].dt.minute
@@ -58,31 +59,30 @@ def preprocess_data(df):
     ))
     return df, features, df['is_popular'], tfidf, le_name, le_music
 
+# Evaluasi model tanpa melatih ulang
 def evaluate_model(model, X, y):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    try:
-        y_pred = model.predict(X_test)
-    except ValueError as e:
-        st.error(f"Kesalahan selama prediksi: {e}")
-        return
+    y_pred = model.predict(X_test)
 
     accuracy = accuracy_score(y_test, y_pred)
     precision = precision_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred)
 
+    # Menampilkan metrik
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Akurasi", f"{accuracy:.2f}")
     col2.metric("Presisi", f"{precision:.2f}")
     col3.metric("Recall", f"{recall:.2f}")
     col4.metric("F1 Score", f"{f1:.2f}")
 
+    # Classification Report
     report = classification_report(y_test, y_pred, output_dict=True)
     report_df = pd.DataFrame(report).T.round(2)
     st.subheader("Laporan Klasifikasi")
     st.dataframe(report_df)
 
+    # Confusion Matrix
     cm = confusion_matrix(y_test, y_pred)
     st.subheader("Matriks Kebingungan")
     fig_cm, ax_cm = plt.subplots(figsize=(5, 4), facecolor='#000000')
@@ -103,23 +103,16 @@ def predict_content(model, tfidf, text, author, music, duration, waktu):
     hour = waktu.hour
     minute = waktu.minute
     second = waktu.second
-
-    # Encode author dan music menggunakan LabelEncoder
+    
     author_encoded = st.session_state.le_name.transform([str(author)])[0] if str(author) in st.session_state.le_name.classes_ else -1
     music_encoded = st.session_state.le_music.transform([str(music)])[0] if str(music) in st.session_state.le_music.classes_ else -1
-
-    # Transformasi teks menggunakan TF-IDF
+    
     tfidf_matrix = tfidf.transform([text])
     features = hstack((
         tfidf_matrix,
         np.array([[author_encoded, music_encoded, duration, hour, minute, second, text_length]])
     ))
-
-    expected_feature_count = 105  # Update jika jumlah fitur berubah
-    if features.shape[1] != expected_feature_count:
-        st.error(f"Jumlah fitur tidak sesuai: {features.shape[1]} vs {expected_feature_count}")
-        return None
-
+    
     prediction = model.predict(features)
     return prediction[0]
 
@@ -260,7 +253,7 @@ def main():
         st.session_state.tfidf = tfidf
 
         # Buat ulang fitur dari data agar sesuai
-        tfidf_matrix = tfidf.transform(df['text'])
+        tfidf_matrix = tfidf.transform(df['text'])  # Gunakan 'text', bukan 'hashtags_str'
         features = hstack((
             tfidf_matrix,
             np.array(df[['authorMeta.name_encoded', 'musicMeta.musicName_encoded',
