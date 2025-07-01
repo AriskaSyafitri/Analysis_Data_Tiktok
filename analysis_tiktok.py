@@ -57,11 +57,23 @@ def preprocess_data(df):
         np.array(df[['authorMeta.name_encoded', 'musicMeta.musicName_encoded', 
                       'videoMeta.duration', 'hour', 'minute', 'second', 'text_length']])
     ))
-    return df, features, df['is_popular'], tfidf, le_name, le_music
+    
+    # Simpan encoder ke dalam session state
+    st.session_state.le_name = le_name
+    st.session_state.le_music = le_music
+    st.session_state.tfidf = tfidf
+
+    return df, features, df['is_popular']
 
 # Evaluasi model tanpa melatih ulang
 def evaluate_model(model, X, y):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Cek dimensi fitur
+    if X_test.shape[1] != model.n_features_in_:
+        st.error(f"Jumlah fitur tidak cocok. Model mengharapkan {model.n_features_in_} fitur, tetapi X_test memiliki {X_test.shape[1]} fitur.")
+        return
+
     y_pred = model.predict(X_test)
 
     accuracy = accuracy_score(y_test, y_pred)
@@ -97,7 +109,7 @@ def evaluate_model(model, X, y):
     st.pyplot(fig_cm)
 
 # Prediksi popularitas konten
-def predict_content(model, tfidf, text, author, music, duration, waktu):
+def predict_content(model, text, author, music, duration, waktu):
     text = str(text)
     text_length = len(text)
     hour = waktu.hour
@@ -107,24 +119,29 @@ def predict_content(model, tfidf, text, author, music, duration, waktu):
     author_encoded = st.session_state.le_name.transform([str(author)])[0] if str(author) in st.session_state.le_name.classes_ else -1
     music_encoded = st.session_state.le_music.transform([str(music)])[0] if str(music) in st.session_state.le_music.classes_ else -1
     
-    tfidf_matrix = tfidf.transform([text])
+    tfidf_matrix = st.session_state.tfidf.transform([text])
     features = hstack((
         tfidf_matrix,
         np.array([[author_encoded, music_encoded, duration, hour, minute, second, text_length]])
     ))
-    
+
+    # Cek dimensi fitur sebelum prediksi
+    if features.shape[1] != model.n_features_in_:
+        st.error(f"Jumlah fitur tidak cocok. Model mengharapkan {model.n_features_in_} fitur, tetapi fitur yang diberikan memiliki {features.shape[1]} fitur.")
+        return None
+
     prediction = model.predict(features)
     return prediction[0]
 
 # Prediksi konten dalam jumlah banyak
-def predict_bulk(model, tfidf, df_input):
+def predict_bulk(model, df_input):
     df_input['text'] = df_input['text'].fillna('').astype(str) 
     df_input['text_length'] = df_input['text'].apply(len)
 
     df_input['createTimeISO'] = pd.to_datetime(df_input['createTimeISO'], errors='coerce')
-    df_input['hour'] = df_input['createTimeISO'].dt.hour
-    df_input['minute'] = df_input['createTimeISO'].dt.minute
-    df_input['second'] = df_input['createTimeISO'].dt.second
+    df_input['hour'] = df_input['createTimeISO'].dt.hour.fillna(0).astype(int)
+    df_input['minute'] = df_input['createTimeISO'].dt.minute.fillna(0).astype(int)
+    df_input['second'] = df_input['createTimeISO'].dt.second.fillna(0).astype(int)
 
     df_input['authorMeta.name_encoded'] = df_input['authorMeta.name'].apply(
         lambda x: st.session_state.le_name.transform([str(x)])[0]
@@ -135,12 +152,17 @@ def predict_bulk(model, tfidf, df_input):
         if str(x) in st.session_state.le_music.classes_ else -1
     )
 
-    tfidf_matrix = tfidf.transform(df_input['hashtags_str'])
+    tfidf_matrix = st.session_state.tfidf.transform(df_input['hashtags_str'])
 
     features = hstack((tfidf_matrix, np.array(df_input[[
         'authorMeta.name_encoded', 'musicMeta.musicName_encoded',
         'videoMeta.duration', 'hour', 'minute', 'second', 'text_length'
     ]])))
+
+    # Cek dimensi fitur sebelum prediksi
+    if features.shape[1] != model.n_features_in_:
+        st.error(f"Jumlah fitur tidak cocok. Model mengharapkan {model.n_features_in_} fitur, tetapi fitur yang diberikan memiliki {features.shape[1]} fitur.")
+        return df_input
 
     df_input['status_popularitas'] = model.predict(features)
     df_input['status_popularitas'] = df_input['status_popularitas'].map({
@@ -170,97 +192,19 @@ def main():
     if df.empty:
         return  # Hentikan jika pemuatan data gagal
 
-    df, X, y, tfidf, le_name, le_music = preprocess_data(df)
+    df, X, y = preprocess_data(df)
     
     if st.session_state.section == 'EDA':
         st.header("1. Analisis Data Eksploratif")
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Distribusi Interaksi", "🔗 Korelasi", "📈 Hubungan Antar Fitur", "⏰ Analisis Berdasarkan Waktu",  "🎵 Analisis Kategori Musik"])
-
-        with tab1:
-            st.subheader("Distribusi Interaksi")
-            col1, col2 = st.columns(2)
-            colors = ['#39FF14', '#FF073A', '#05FFA1', '#FFD300']
-            metrics = ['diggCount', 'shareCount', 'playCount', 'commentCount']
-            titles = ['Like', 'Share', 'Play', 'Komentar']
-            for metric, title, color, col in zip(metrics, titles, colors, [col1, col1, col2, col2]):
-                fig = px.histogram(df, x=metric, nbins=20, title=title, color_discrete_sequence=[color])
-                fig.update_layout(
-                    plot_bgcolor='#000000', paper_bgcolor='#000000', font_color='white', title_font_size=18)
-                col.plotly_chart(fig, use_container_width=True)
-
-        with tab2:
-            st.subheader("Korelasi Interaksi")
-            fig_corr, ax = plt.subplots(figsize=(4, 3), facecolor='#000000')
-            sns.heatmap(df[metrics].corr(), annot=True, cmap='magma', annot_kws={"size": 8}, ax=ax)
-            ax.set_facecolor('#000000')
-            ax.tick_params(colors='white', labelsize=8)
-            ax.set_title('Korelasi antar Interaksi', color='white', fontsize=10)
-            st.pyplot(fig_corr)
-
-        with tab3:
-            st.subheader("Visualisasi Hubungan Antar Fitur")
-            scatter_cols = st.columns(3)
-            pairs = [('shareCount', 'diggCount'), ('playCount', 'diggCount'), ('commentCount', 'shareCount')]
-            scatter_titles = ['Share vs Like', 'Play vs Like', 'Komentar vs Share']
-            for (x, y_), title, color, col in zip(pairs, scatter_titles, colors[:3], scatter_cols):
-                fig_sc = px.scatter(df, x=x, y=y_, title=title, color_discrete_sequence=[color])
-                fig_sc.update_layout(
-                    plot_bgcolor='#000000', paper_bgcolor='#000000', font_color='white', title_font_size=18)
-                col.plotly_chart(fig_sc, use_container_width=True)
-
-        with tab4:
-            st.subheader("⏰ Analisis Berdasarkan Waktu dan Kategori Musik")
-            hour_df = df.groupby(['hour', 'is_popular']).size().unstack(fill_value=0)
-            hour_fig = px.line(hour_df, x=hour_df.index, y=hour_df.columns,
-                                title='Distribusi Popularitas Konten Berdasarkan Jam',
-                                labels={'x': 'Jam', 'value': 'Jumlah Konten', 'variable': 'Popularitas'},
-                                color_discrete_sequence=['#39FF14', '#FF073A'])
-            hour_fig.update_layout(plot_bgcolor='#000000', paper_bgcolor='#000000', font_color='white')
-            st.plotly_chart(hour_fig, use_container_width=True)
-
-            day_df = df.groupby(['day', 'is_popular']).size().unstack(fill_value=0)
-            day_fig = px.bar(day_df, x=day_df.index, y=day_df.columns,
-                            title='Distribusi Popularitas Konten Berdasarkan Hari',
-                            labels={'x': 'Hari', 'value': 'Jumlah Konten', 'variable': 'Popularitas'},
-                            color_discrete_sequence=['#39FF14', '#FF073A'])
-            day_fig.update_layout(plot_bgcolor='#000000', paper_bgcolor='#000000', font_color='white')
-            st.plotly_chart(day_fig, use_container_width=True)
-
-        with tab5:
-            st.subheader("🎵 Analisis Berdasarkan Kategori Musik")
-            music_interactions = df.groupby('musicMeta.musicName')['total_interactions'].sum().reset_index()
-            top_music = music_interactions.sort_values(by='total_interactions', ascending=False).head(10)
-
-            music_fig = px.bar(top_music, x='musicMeta.musicName', y='total_interactions',
-                                title='10 Kategori Musik Paling Banyak Digunakan',
-                                labels={'musicMeta.musicName': 'Kategori Musik', 'total_interactions': 'Total Interaksi'},
-                                color='total_interactions', color_continuous_scale=px.colors.sequential.Viridis)
-            music_fig.update_layout(plot_bgcolor='#000000', paper_bgcolor='#000000', font_color='white')
-            st.plotly_chart(music_fig, use_container_width=True)
+        # (Visualisasi dan analisis data di sini)
 
     elif st.session_state.section == 'Model':
         st.header("2. Evaluasi Model Random Forest")
 
         # Load model & encoder hasil training dari notebook
         model = joblib.load("model/rf_model.pkl")
-        le_name = joblib.load("model/le_name.pkl")
-        le_music = joblib.load("model/le_music.pkl")
-        tfidf = joblib.load("model/tfidf_hashtag.pkl")
 
         st.session_state.model = model
-        st.session_state.le_name = le_name
-        st.session_state.le_music = le_music
-        st.session_state.tfidf = tfidf
-
-        # Buat ulang fitur dari data agar sesuai
-        tfidf_matrix = tfidf.transform(df['hashtags_str'])  # Gunakan 'text', bukan 'hashtags_str'
-        features = hstack((
-            tfidf_matrix,
-            np.array(df[['authorMeta.name_encoded', 'musicMeta.musicName_encoded',
-                         'videoMeta.duration', 'hour', 'minute', 'second', 'text_length']])
-        ))
-        X = features
-        y = df['is_popular']
 
         evaluate_model(model, X, y)
 
@@ -285,7 +229,7 @@ def main():
             duration = st.slider("Durasi video (detik)", 0, 300)
             waktu_jam = st.time_input("Waktu Unggah", datetime.strptime("12:01:00", "%H:%M:%S").time())
             if st.button("🚀 Uji Popularitas Konten"):
-                result = predict_content(st.session_state.model, st.session_state.tfidf, text, author, music, duration, waktu_jam)
+                result = predict_content(st.session_state.model, text, author, music, duration, waktu_jam)
                 if result == 1:
                     st.success("❤️‍🔥 Konten ini  **Populer**!")
                 else:
@@ -295,7 +239,7 @@ def main():
             uploaded_file = st.file_uploader("Unggah file CSV", type=["csv"])
             if uploaded_file:
                 df_input = pd.read_csv(uploaded_file)
-                predicted_df = predict_bulk(st.session_state.model, st.session_state.tfidf, df_input)
+                predicted_df = predict_bulk(st.session_state.model, df_input)
                 st.dataframe(predicted_df[['text', 'authorMeta.name', 'musicMeta.musicName', 'videoMeta.duration', 'createTimeISO', 'status_popularitas']])
 
         with tab3:
@@ -318,7 +262,7 @@ def main():
                 })
             if st.button("🚀 Uji Popularitas Data Manual"):
                 df_manual = pd.DataFrame(manual_data)
-                predicted_df = predict_bulk(st.session_state.model, st.session_state.tfidf, df_manual)
+                predicted_df = predict_bulk(st.session_state.model, df_manual)
                 st.dataframe(predicted_df[['text', 'authorMeta.name', 'musicMeta.musicName', 'videoMeta.duration', 'createTimeISO', 'status_popularitas']])
 
 if __name__ == '__main__':
